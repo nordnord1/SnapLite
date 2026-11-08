@@ -1,0 +1,46 @@
+{
+  "language": "en",
+  "hotkeys": {
+    "region_capture": "Ctrl+PrintScreen",
+    "fullscreen_capture": "PrintScreen"
+  },
+  "capture": {
+    "copy_to_clipboard": true,
+    "auto_save_fullscreen": true,
+    "auto_save_region": false,
+    "save_directory": "",
+    "filename_template": "Snap_{date}_{time}",
+    "image_format": "png",
+    "show_magnifier": true,
+    "show_crosshair": true,
+    "dim_opacity": 110
+  },
+  "toolbar": {
+    "position": "top",
+    "default_color": "#FF3B30",
+    "stroke_width": 3,
+    "blur_intensity": 15,
+    "visible_tools": [
+      "select",
+      "rect",
+      "ellipse",
+      "line",
+      "arrow",
+      "pen",
+      "highlighter",
+      "text",
+      "callout",
+      "step",
+      "blur",
+      "pixelate"
+    ]
+  },
+  "appearance": {
+    "background_image": "",
+    "background_blur": 18,
+    "background_dim": 45,
+    "adaptive_colors": true,
+    "manual_accent": "#2563EB",
+    "accent_color": "#2563EB"
+  }
+}

@@ -464,6 +464,20 @@ class MainSettingsWindow(QMainWindow):
 
         lay.addStretch()
 
+        by_nord_lbl = QLabel("by nord")
+        by_nord_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        by_nord_lbl.setStyleSheet("""
+            color: rgba(255, 255, 255, 95);
+            font-family: "Segoe UI Variable Display", "Segoe UI Light", "Segoe UI", sans-serif;
+            font-size: 11px;
+            font-style: normal;
+            font-weight: 300;
+            letter-spacing: 2.8px;
+            padding-bottom: 4px;
+        """)
+        lay.addWidget(by_nord_lbl)
+        lay.addSpacing(2)
+
         self.btn_support = QPushButton()
         self.btn_support.setIcon(get_icon("heart", "#FF375F", 16))
         self.btn_support.setIconSize(QSize(16, 16))
@@ -485,20 +499,7 @@ class MainSettingsWindow(QMainWindow):
         """)
         self.btn_support.clicked.connect(self._open_support_dialog)
         lay.addWidget(self.btn_support)
-        lay.addSpacing(4)
-
-        by_nord_lbl = QLabel("by nord")
-        by_nord_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        by_nord_lbl.setStyleSheet("""
-            color: rgba(255, 255, 255, 95);
-            font-family: "Segoe UI Variable Display", "Segoe UI Light", "Segoe UI", sans-serif;
-            font-size: 11px;
-            font-style: normal;
-            font-weight: 300;
-            letter-spacing: 2.8px;
-            padding-bottom: 3px;
-        """)
-        lay.addWidget(by_nord_lbl)
+        lay.addSpacing(6)
 
         status_card = QFrame()
         status_card.setProperty("role", "Card")
