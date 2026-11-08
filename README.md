@@ -1,36 +1,50 @@
 # SnapLite
 
-**SnapLite** — легкий, швидкий та кастомізований інструмент для миттєвих скріншотів та анотацій на Windows (**by nord**).
+**SnapLite** is a lightweight, blazing-fast, and customizable screenshot and annotation utility for Windows (**by nord**).
 
 ---
 
-## Можливості (Features)
-- **Миттєве захоплення екрана (0% CPU у фоні)**: низькорівневий Win32 хук клавіатури (`PrintScreen` та `Ctrl+PrintScreen`) і пряме захоплення через Win32 GDI.
-- **Інструменти малювання та анотацій**: прямокутник, еліпс, лінія, стрілка, олівець, маркер, текст, виноска, нумерація кроків, розмиття (`Blur`) та пікселізація (`Pixelate`).
-- **Кругла піксельна лупа**: точне позиціонування до пікселя з координатами `X / Y`.
-- **Кастомізація фону та адаптивна палітра**: встановлення власного фото на фон меню з регулюванням розмиття (`Blur`) та автоматичним підбором акцентних кольорів.
-- **Локалізація**: Українська (`UA`), English (`EN`), Русский (`RU`).
-- **Автозапуск Windows**: зручний перемикач інтеграції з `shell:startup`.
+## ✨ Features
+
+- **Instant Screen Capture (0% Idle CPU)**: Low-level Win32 keyboard hook (`PrintScreen` & `Ctrl+PrintScreen`) and hardware-accelerated Win32 GDI screen capture.
+- **Rich Annotation Toolkit**: Rectangle, Ellipse, Line, Arrow, Freehand Pen, Highlighter, Text, Callout bubbles, Step counters, Blur, and Pixelate.
+- **Circular Pixel-Grid Magnifier**: Real-time crosshair inspection with exact `X / Y` pixel coordinates for pixel-perfect crops.
+- **Custom Menu Background & Adaptive Theme**: Set your own background image with adjustable blur and contrast dimming, or let SnapLite automatically extract accent colors from your wallpaper.
+- **Localization**: Built-in support for English (`EN`), Ukrainian (`UA`), and Russian (`RU`).
+- **Windows Startup Integration**: Seamlessly enable or disable autostart on system boot via `shell:startup`.
 
 ---
 
-## Встановлення та запуск із коду
+## 🚀 Getting Started
+
+### Prerequisites
+
+Ensure you have Python 3.10+ installed on your Windows machine.
+
+### Installation & Running from Source
 
 ```bash
+git clone https://github.com/nordnord1/SnapLite.git
+cd SnapLite
 pip install -r requirements.txt
 python main.py
 ```
 
-### Збірка у `.exe` (PyInstaller)
+### Build Standalone Executable (.exe)
+
+Compile the application into a single portable `.exe` with embedded icon and zero console window:
+
 ```bash
-pyinstaller --noconfirm --onefile --windowed --name "SnapLite" --icon "icon.ico" --hidden-import "PyQt6.QtSvg" main.py
+pyinstaller --noconfirm --onefile --windowed --name "SnapLite" --icon "icon.ico" --add-data "icon.ico;." --hidden-import "PyQt6.QtSvg" --hidden-import "PyQt6.QtCore" --hidden-import "PyQt6.QtGui" --hidden-import "PyQt6.QtWidgets" --hidden-import "PIL" main.py
 ```
+
+The compiled binary will be generated in `dist/SnapLite.exe`.
 
 ---
 
-## ❤️ Підтримати проект (Support Us)
+## ❤️ Support Us
 
-Якщо вам подобається **SnapLite**, ви можете підтримати автора (**by nord**) фінансово за допомогою криптовалюти:
+If you find **SnapLite** useful and want to support its ongoing development and new features, you can donate via cryptocurrency directly to the author (**by nord**):
 
 - **Ethereum (ETH / ERC-20):**
   ```text
@@ -51,11 +65,12 @@ pyinstaller --noconfirm --onefile --windowed --name "SnapLite" --icon "icon.ico"
 
 ---
 
-## Ліцензія (Source-Available / Non-Commercial)
+## 📜 License
 
-Цей проект розповсюджується за ліцензією **Source-Available / Non-Commercial License** (`LICENSE`).
-- **Дозволено**: безкоштовне використання, вивчення вихідного коду та створення некомерційних форків.
-- **Обов'язкова умова**: збереження оригінального авторства **`by nord`** у коді, документації та інтерфейсі програми.
-- **Заборонено**: комерційне використання або продаж програмного забезпечення та його модифікацій.
+This project is licensed under the **Source-Available / Non-Commercial License** ([LICENSE](LICENSE)).
 
-Copyright © 2026 **by nord**.
+- **Allowed**: Free personal use, educational code study, and non-commercial forks.
+- **Requirement**: The original author attribution **`by nord`** must be preserved in all copies, forks, derivatives, and user interfaces.
+- **Prohibited**: Commercial redistribution, sale, or sublicensing of the software or any modified versions.
+
+Copyright © 2026 **by nord**. All rights reserved.
