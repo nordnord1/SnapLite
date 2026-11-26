@@ -1,7 +1,8 @@
 import os
 import subprocess
+from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
-from PyQt6.QtGui import QPixmap, QGuiApplication
+from PyQt6.QtGui import QPixmap, QGuiApplication, QColor
 from PyQt6.QtWidgets import (
     QWidget,
     QHBoxLayout,
@@ -12,8 +13,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 from src.icons import get_icon
-from src.capture import save_pixmap_to_disk
-from src.i18n import tr
+from src.capture import default_snap_filename, save_pixmap_to_disk
+from src.i18n import tr, tr_btn
+from src import theme
 
 
 class CaptureToast(QWidget):
@@ -34,49 +36,56 @@ class CaptureToast(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.setFixedSize(330, 118)
+        self.setFixedSize(344, 120)
+
+        p = theme.CURRENT
+        av = QColor(p.accent_vivid)
+        av_border = theme.rgba((av.red(), av.green(), av.blue()), 115)
+        av_hover = theme.rgba((av.red(), av.green(), av.blue()), 52)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
         card = QFrame(self)
         card.setObjectName("ToastCard")
-        card.setStyleSheet("""
-            QFrame#ToastCard {
-                background-color: rgba(24, 25, 29, 245);
-                border: 1px solid rgba(255, 255, 255, 26);
-                border-radius: 12px;
-            }
-            QLabel {
+        card.setStyleSheet(f"""
+            QFrame#ToastCard {{
+                background-color: rgba(22, 23, 28, 246);
+                border: 1px solid rgba(255, 255, 255, 32);
+                border-radius: 13px;
+            }}
+            QLabel {{
                 background: transparent;
                 border: none;
                 font-family: "Segoe UI", sans-serif;
-            }
-            QPushButton.ToastBtn {
+            }}
+            QPushButton.ToastBtn {{
                 background-color: rgba(255, 255, 255, 16);
-                border: 1px solid rgba(255, 255, 255, 18);
-                border-radius: 7px;
+                border: 1px solid rgba(255, 255, 255, 24);
+                border-radius: 8px;
                 color: #F2F2F7;
                 font-size: 12px;
                 font-weight: 600;
                 min-height: 30px;
                 padding: 0 12px;
-            }
-            QPushButton.ToastBtn:hover {
-                background-color: rgba(255, 255, 255, 28);
-            }
-            QPushButton#CloseBtn {
+            }}
+            QPushButton.ToastBtn:hover {{
+                background-color: {av_hover};
+                border-color: {av_border};
+                color: #FFFFFF;
+            }}
+            QPushButton#CloseBtn {{
                 background: transparent;
                 border: none;
-                border-radius: 5px;
-                min-width: 22px;
-                max-width: 22px;
-                min-height: 22px;
-                max-height: 22px;
-            }
-            QPushButton#CloseBtn:hover {
-                background-color: rgba(255, 255, 255, 20);
-            }
+                border-radius: 6px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+            }}
+            QPushButton#CloseBtn:hover {{
+                background-color: rgba(255, 255, 255, 22);
+            }}
         """)
         outer.addWidget(card)
 
@@ -88,11 +97,11 @@ class CaptureToast(QWidget):
         top_row.setSpacing(12)
 
         thumb_lbl = QLabel()
-        thumb_lbl.setFixedSize(56, 40)
+        thumb_lbl.setFixedSize(58, 42)
         thumb_lbl.setStyleSheet("""
             background-color: #121316;
-            border: 1px solid rgba(255, 255, 255, 25);
-            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 28);
+            border-radius: 6px;
         """)
         scaled = pixmap.scaled(
             54, 38,
@@ -105,12 +114,21 @@ class CaptureToast(QWidget):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        title = QLabel(tr(lang, "toast_copied"))
+
+        copied = bool(result.get("copied", True))
+        if copied and self.saved_path:
+            title_key = "toast_copied_saved"
+        elif self.saved_path:
+            title_key = "toast_saved_only"
+        else:
+            title_key = "toast_copied"
+
+        title = QLabel(tr(lang, title_key))
         title.setStyleSheet("color: #FFFFFF; font-size: 13px; font-weight: 600;")
 
         kb_size = result.get("size_kb", max(1, (pixmap.width() * pixmap.height()) // 3200))
         meta = QLabel(f"{pixmap.width()} × {pixmap.height()} px • {kb_size} KB")
-        meta.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        meta.setStyleSheet("color: rgba(235, 235, 245, 155); font-size: 11px;")
 
         text_col.addWidget(title)
         text_col.addWidget(meta)
@@ -118,7 +136,7 @@ class CaptureToast(QWidget):
 
         close_btn = QPushButton()
         close_btn.setObjectName("CloseBtn")
-        close_btn.setIcon(get_icon("close", "#8E8E93", 14))
+        close_btn.setIcon(get_icon("close", "#98989F", 14))
         close_btn.setIconSize(QSize(14, 14))
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.close)
@@ -129,12 +147,12 @@ class CaptureToast(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        btn_open = QPushButton(tr(lang, "toast_open"))
+        btn_open = QPushButton(tr_btn(lang, "toast_open"))
         btn_open.setProperty("class", "ToastBtn")
         btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_open.clicked.connect(self._on_open)
 
-        btn_save_as = QPushButton(tr(lang, "toast_save_as"))
+        btn_save_as = QPushButton(tr_btn(lang, "toast_save_as"))
         btn_save_as.setProperty("class", "ToastBtn")
         btn_save_as.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_save_as.clicked.connect(self._on_save_as)
@@ -149,6 +167,15 @@ class CaptureToast(QWidget):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.close)
         self.timer.start(4800)
+
+    def enterEvent(self, event):
+        self.timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if self.isVisible():
+            self.timer.start(1800)
+        super().leaveEvent(event)
 
     def _position_bottom_right(self):
         screen = QGuiApplication.primaryScreen()
@@ -172,11 +199,12 @@ class CaptureToast(QWidget):
     def _on_save_as(self):
         self.timer.stop()
         lang = self.config.get("language", default="ua")
-        default_dir = self.config.get("capture", "save_directory", "")
+        default_dir = self.config.get("capture", "save_directory", "") or str(Path.home() / "Pictures" / "SnapLite")
+        default_file = str(Path(default_dir) / default_snap_filename("png"))
         file_path, _ = QFileDialog.getSaveFileName(
             None,
             tr(lang, "dlg_save_title"),
-            os.path.join(default_dir, "Snap.png"),
+            default_file,
             "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg)",
         )
         if file_path:

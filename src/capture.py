@@ -115,16 +115,35 @@ def grab_virtual_screen():
     return pixmap, geom
 
 
-def apply_blur_region(base_pixmap: QPixmap, rect: QRect, intensity: int = 15, pixelate: bool = False) -> QPixmap:
+def pixmap_to_pil_rgba(pixmap: QPixmap) -> Image.Image:
+    qimg = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+    w, h = qimg.width(), qimg.height()
+    ptr = qimg.bits()
+    ptr.setsize(h * w * 4)
+    return Image.frombytes("RGBA", (w, h), bytes(ptr), "raw", "RGBA")
+
+
+def apply_blur_region(
+    base_pixmap: QPixmap,
+    rect: QRect,
+    intensity: int = 15,
+    pixelate: bool = False,
+    pil_source: Image.Image = None,
+) -> QPixmap:
+    max_w = pil_source.width if pil_source is not None else base_pixmap.width()
+    max_h = pil_source.height if pil_source is not None else base_pixmap.height()
     x = max(0, rect.x())
     y = max(0, rect.y())
-    w = max(1, min(rect.width(), base_pixmap.width() - x))
-    h = max(1, min(rect.height(), base_pixmap.height() - y))
+    w = max(1, min(rect.width(), max_w - x))
+    h = max(1, min(rect.height(), max_h - y))
 
-    cropped_qimg = base_pixmap.copy(x, y, w, h).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
-    ptr = cropped_qimg.bits()
-    ptr.setsize(h * w * 4)
-    pil_patch = Image.frombytes("RGBA", (w, h), bytes(ptr), "raw", "RGBA")
+    if pil_source is not None:
+        pil_patch = pil_source.crop((x, y, x + w, y + h))
+    else:
+        cropped_qimg = base_pixmap.copy(x, y, w, h).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+        ptr = cropped_qimg.bits()
+        ptr.setsize(h * w * 4)
+        pil_patch = Image.frombytes("RGBA", (w, h), bytes(ptr), "raw", "RGBA")
 
     if pixelate:
         block = max(4, intensity)
@@ -145,6 +164,11 @@ def estimate_png_kb(pixmap: QPixmap) -> int:
     buf.open(QIODevice.OpenModeFlag.WriteOnly)
     pixmap.save(buf, "PNG")
     return max(1, len(ba) // 1024)
+
+
+def default_snap_filename(ext: str = "png") -> str:
+    now = datetime.now()
+    return f"Snap_{now.strftime('%Y-%m-%d_%H-%M-%S')}.{ext}"
 
 
 def save_and_copy_pixmap(pixmap: QPixmap, config, is_fullscreen: bool = False) -> dict:
@@ -181,7 +205,8 @@ def save_pixmap_to_disk(pixmap: QPixmap, config, custom_path: str = None) -> str
         pixmap.save(str(target))
         return str(target)
 
-    save_dir = Path(config.get("capture", "save_directory", str(Path.home() / "Pictures" / "SnapLite")))
+    raw_dir = config.get("capture", "save_directory", "") or str(Path.home() / "Pictures" / "SnapLite")
+    save_dir = Path(raw_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now()

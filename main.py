@@ -16,16 +16,25 @@ from src.overlay import SnippingOverlay
 from src.main_window import MainSettingsWindow
 from src.toast import CaptureToast
 from src.icons import get_icon
-from src.i18n import tr
+from src.i18n import tr, tr_btn
+from src import theme
 
 
 def get_app_icon(accent_hex: str = "#2563EB") -> QIcon:
-    base_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    ico_path = base_dir / "icon.ico"
-    if ico_path.exists():
-        icon = QIcon(str(ico_path))
-        if not icon.isNull():
-            return icon
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "icon.ico")
+        candidates.append(Path(sys.executable).parent / "icon.ico")
+    else:
+        candidates.append(Path(__file__).resolve().parent / "icon.ico")
+
+    for ico_path in candidates:
+        if ico_path.exists():
+            icon = QIcon(str(ico_path))
+            if not icon.isNull():
+                return icon
     return create_tray_icon(accent_hex)
 
 
@@ -35,11 +44,15 @@ def create_tray_icon(accent_hex: str = "#2563EB") -> QIcon:
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+    c = QColor(accent_hex)
+    lum = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+    fg = "#111214" if lum > 180 else "#FFFFFF"
+
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(accent_hex))
+    p.setBrush(c)
     p.drawRoundedRect(6, 6, 52, 52, 14, 14)
 
-    p.setPen(QColor("#FFFFFF"))
+    p.setPen(QColor(fg))
     p.setBrush(Qt.BrushStyle.NoBrush)
     pen = p.pen()
     pen.setWidth(4)
@@ -57,7 +70,8 @@ class SnapLiteController:
         self.active_toast: CaptureToast | None = None
         self._tray_notified_once = False
 
-        app_icon = get_app_icon(self.config.get("appearance", "accent_color", "#2563EB"))
+        accent_hex = self.config.get("appearance", "accent_color", "#2563EB")
+        app_icon = get_app_icon(accent_hex)
         self.app.setWindowIcon(app_icon)
 
         self.hotkey_manager = GlobalHotkeyManager()
@@ -65,13 +79,8 @@ class SnapLiteController:
         self.hotkey_manager.fullscreen_triggered.connect(self.trigger_fullscreen_capture)
         self.register_hotkeys()
 
-        self.tray = QSystemTrayIcon(
-            create_tray_icon(self.config.get("appearance", "accent_color", "#2563EB")),
-            self.app,
-        )
-        self._build_tray_menu()
+        self.tray = QSystemTrayIcon(create_tray_icon(accent_hex), self.app)
         self.tray.activated.connect(self._on_tray_activated)
-        self.tray.show()
 
         self.main_window = MainSettingsWindow(self.config, self.hotkey_manager)
         self.main_window.setWindowIcon(app_icon)
@@ -82,11 +91,15 @@ class SnapLiteController:
         self.main_window.language_changed.connect(self._on_language_changed)
         self.main_window.minimized_to_tray.connect(self._on_minimized_to_tray)
 
+        self._build_tray_menu()
+        self.tray.show()
+
     def _lang(self) -> str:
         return self.config.get("language", default="ua")
 
     def _on_accent_changed(self, accent_hex: str):
         self.tray.setIcon(create_tray_icon(accent_hex))
+        self._build_tray_menu()
 
     def _on_language_changed(self, _lang_code: str):
         self._build_tray_menu()
@@ -104,41 +117,42 @@ class SnapLiteController:
 
     def _build_tray_menu(self):
         L = self._lang()
+        p = theme.CURRENT
         self.tray.setToolTip(tr(L, "tray_tooltip"))
         menu = QMenu()
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #1C1D21;
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #1A1B20;
                 color: #F2F2F7;
-                border: 1px solid rgba(255, 255, 255, 28);
-                border-radius: 8px;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 6px 24px 6px 12px;
-                border-radius: 5px;
+                border: 1px solid rgba(255, 255, 255, 30);
+                border-radius: 9px;
+                padding: 5px;
+            }}
+            QMenu::item {{
+                padding: 7px 24px 7px 12px;
+                border-radius: 6px;
                 font-size: 12px;
-            }
-            QMenu::item:selected {
-                background-color: #2563EB;
-                color: #FFFFFF;
-            }
-            QMenu::separator {
+            }}
+            QMenu::item:selected {{
+                background-color: {p.accent};
+                color: {p.on_accent};
+            }}
+            QMenu::separator {{
                 height: 1px;
                 background: rgba(255, 255, 255, 18);
                 margin: 4px 6px;
-            }
+            }}
         """)
-        act_open = QAction(get_icon("sliders", "#F2F2F7", 16), tr(L, "tray_open"), menu)
+        act_open = QAction(get_icon("sliders", "#F2F2F7", 16), tr_btn(L, "tray_open"), menu)
         act_open.triggered.connect(self.show_main_window)
 
-        act_region = QAction(get_icon("select", "#F2F2F7", 16), tr(L, "tray_region"), menu)
+        act_region = QAction(get_icon("select", "#F2F2F7", 16), tr_btn(L, "tray_region"), menu)
         act_region.triggered.connect(self.trigger_region_capture)
 
-        act_full = QAction(get_icon("monitor", "#F2F2F7", 16), tr(L, "tray_full"), menu)
+        act_full = QAction(get_icon("monitor", "#F2F2F7", 16), tr_btn(L, "tray_full"), menu)
         act_full.triggered.connect(self.trigger_fullscreen_capture)
 
-        act_quit = QAction(get_icon("close", "#FF453A", 16), tr(L, "tray_quit"), menu)
+        act_quit = QAction(get_icon("close", "#FF453A", 16), tr_btn(L, "tray_quit"), menu)
         act_quit.triggered.connect(self.quit_app)
 
         menu.addAction(act_open)
@@ -238,6 +252,7 @@ class SnapLiteController:
 
     def quit_app(self):
         self._dismiss_active_toast()
+        self.config.flush()
         self.hotkey_manager.unregister_all()
         self.tray.hide()
         self.app.quit()

@@ -34,7 +34,7 @@ class AnnotationItem:
             return QRectF(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)).normalized()
         return QRectF(self.start_pos, self.end_pos).normalized()
 
-    def draw(self, painter: QPainter):
+    def draw(self, painter: QPainter, show_preview_border: bool = False):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
@@ -42,10 +42,11 @@ class AnnotationItem:
             rect = self.bounding_rect().toRect()
             if self.cached_pixmap and not self.cached_pixmap.isNull():
                 painter.drawPixmap(rect, self.cached_pixmap)
-            pen = QPen(QColor(255, 255, 255, 90), 1, Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(rect)
+            if show_preview_border:
+                pen = QPen(QColor(255, 255, 255, 110), 1, Qt.PenStyle.DashLine)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(rect)
             painter.restore()
             return
 
@@ -103,32 +104,49 @@ class AnnotationItem:
                 painter.setFont(font)
                 metrics = painter.fontMetrics()
                 lines = self.text.split("\n")
-                w = max(metrics.horizontalAdvance(line) for line in lines) + 16
+                w = max(metrics.horizontalAdvance(line) for line in lines) + 18
                 h = metrics.height() * len(lines) + 12
                 bg_rect = QRectF(self.start_pos.x(), self.start_pos.y(), w, h)
 
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(20, 20, 24, 185))
+                painter.setPen(QPen(QColor(255, 255, 255, 28), 1))
+                painter.setBrush(QColor(20, 20, 24, 195))
                 painter.drawRoundedRect(bg_rect, 6, 6)
 
                 painter.setPen(self.color)
-                painter.drawText(bg_rect.adjusted(8, 6, -8, -6), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.text)
+                painter.drawText(
+                    bg_rect.adjusted(9, 6, -9, -6),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    self.text,
+                )
 
         elif self.tool == "callout":
-            label = self.text if self.text else "Коментар"
+            label = self.text if self.text else "..."
             font = QFont("Segoe UI", 11, QFont.Weight.DemiBold)
             painter.setFont(font)
             metrics = painter.fontMetrics()
             lines = label.split("\n")
-            w = max(metrics.horizontalAdvance(line) for line in lines) + 22
+            w = max(metrics.horizontalAdvance(line) for line in lines) + 24
             h = metrics.height() * len(lines) + 16
 
             box_rect = QRectF(self.end_pos.x(), self.end_pos.y(), w, h)
-            painter.setPen(QPen(self.color, 2))
-            painter.setBrush(QColor(24, 24, 28, 235))
-
             center = box_rect.center()
+
+            painter.save()
+            clip = QPainterPath()
+            clip.addRect(QRectF(-10000, -10000, 30000, 30000))
+            box_path = QPainterPath()
+            box_path.addRoundedRect(box_rect, 8, 8)
+            painter.setClipPath(clip.subtracted(box_path))
+            painter.setPen(QPen(self.color, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             painter.drawLine(self.start_pos, center)
+            painter.restore()
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(self.color))
+            painter.drawEllipse(self.start_pos, 3.8, 3.8)
+
+            painter.setPen(QPen(self.color, 2))
+            painter.setBrush(QColor(24, 24, 28, 238))
             painter.drawRoundedRect(box_rect, 8, 8)
 
             painter.setPen(QColor("#FFFFFF"))
@@ -139,7 +157,7 @@ class AnnotationItem:
             center = self.start_pos
             circle_rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
 
-            painter.setPen(QPen(QColor(255, 255, 255, 220), 2))
+            painter.setPen(QPen(QColor(255, 255, 255, 225), 2))
             painter.setBrush(QBrush(self.color))
             painter.drawEllipse(circle_rect)
 

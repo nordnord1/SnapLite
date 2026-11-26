@@ -1,3 +1,4 @@
+from pathlib import Path
 from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF, QSize, pyqtSignal
 from PyQt6.QtGui import (
     QPainter,
@@ -24,9 +25,16 @@ from PyQt6.QtWidgets import (
 )
 
 from src.annotations import AnnotationItem
-from src.capture import apply_blur_region, save_and_copy_pixmap, save_pixmap_to_disk
+from src.capture import (
+    apply_blur_region,
+    default_snap_filename,
+    pixmap_to_pil_rgba,
+    save_and_copy_pixmap,
+    save_pixmap_to_disk,
+)
 from src.icons import get_icon
-from src.i18n import tr
+from src.i18n import tr, tr_btn
+from src import theme
 
 
 TOOL_DEFINITIONS = [
@@ -106,7 +114,7 @@ class ColorPopover(QFrame):
 
         lay.addLayout(grid)
 
-        more_btn = QPushButton(tr(lang, "more_colors"))
+        more_btn = QPushButton(tr_btn(lang, "more_colors"))
         more_btn.setObjectName("MoreColorsBtn")
         more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         more_btn.clicked.connect(self.more_colors_requested.emit)
@@ -138,14 +146,19 @@ class FloatingSnipToolbar(QFrame):
         self.current_color = QColor(config.get("toolbar", "default_color", "#FF3B30"))
         self.tool_buttons: dict[str, QPushButton] = {}
 
+        p = theme.CURRENT
+        av = QColor(p.accent_vivid)
+        av_rgba = theme.rgba((av.red(), av.green(), av.blue()), 185)
+        av_bg = theme.rgba((av.red(), av.green(), av.blue()), 38)
+
         self.setObjectName("FloatingToolbar")
-        self.setStyleSheet("""
-            QFrame#FloatingToolbar {
-                background-color: rgba(24, 25, 29, 242);
-                border: 1px solid rgba(255, 255, 255, 34);
-                border-radius: 10px;
-            }
-            QPushButton.IconBtn {
+        self.setStyleSheet(f"""
+            QFrame#FloatingToolbar {{
+                background-color: rgba(22, 23, 27, 244);
+                border: 1px solid rgba(255, 255, 255, 36);
+                border-radius: 11px;
+            }}
+            QPushButton.IconBtn {{
                 background-color: transparent;
                 border: 1px solid transparent;
                 border-radius: 7px;
@@ -154,27 +167,27 @@ class FloatingSnipToolbar(QFrame):
                 min-height: 34px;
                 max-height: 34px;
                 padding: 0px;
-            }
-            QPushButton.IconBtn:hover {
+            }}
+            QPushButton.IconBtn:hover {{
                 background-color: rgba(255, 255, 255, 22);
-            }
-            QPushButton.IconBtn[active="true"] {
-                background-color: rgba(255, 255, 255, 20);
-                border: 1px solid rgba(255, 255, 255, 170);
-            }
-            QPushButton#PrimaryCopyBtn {
-                background-color: #2563EB;
-                border: 1px solid #3B82F6;
+            }}
+            QPushButton.IconBtn[active="true"] {{
+                background-color: {av_bg};
+                border: 1px solid {av_rgba};
+            }}
+            QPushButton#PrimaryCopyBtn {{
+                background-color: {p.accent};
+                border: 1px solid {p.accent_vivid};
                 border-radius: 7px;
                 min-width: 34px;
                 max-width: 34px;
                 min-height: 34px;
                 max-height: 34px;
                 padding: 0px;
-            }
-            QPushButton#PrimaryCopyBtn:hover {
-                background-color: #1D4ED8;
-            }
+            }}
+            QPushButton#PrimaryCopyBtn:hover {{
+                background-color: {p.accent_hover};
+            }}
         """)
 
         layout = QHBoxLayout(self)
@@ -189,6 +202,7 @@ class FloatingSnipToolbar(QFrame):
         grip.setStyleSheet("background: transparent; border: none;")
         grip.setCursor(Qt.CursorShape.SizeAllCursor)
         grip.setToolTip(tr(lang, "drag_toolbar"))
+        grip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         layout.addWidget(grip)
 
         visible_tools = set(config.get("toolbar", "visible_tools", [t[0] for t in TOOL_DEFINITIONS]))
@@ -240,7 +254,7 @@ class FloatingSnipToolbar(QFrame):
 
         copy_btn = QPushButton()
         copy_btn.setObjectName("PrimaryCopyBtn")
-        copy_btn.setIcon(get_icon("copy", "#FFFFFF", 18))
+        copy_btn.setIcon(get_icon("copy", p.on_accent, 18))
         copy_btn.setIconSize(QSize(18, 18))
         copy_btn.setToolTip(tr(lang, "copy_tooltip"))
         copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -319,7 +333,13 @@ class FloatingSnipToolbar(QFrame):
 
     def mouseMoveEvent(self, event):
         if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            new_pos = event.globalPosition().toPoint() - self._drag_offset
+            parent = self.parentWidget()
+            if parent is not None:
+                nx = max(6, min(new_pos.x(), parent.width() - self.width() - 6))
+                ny = max(6, min(new_pos.y(), parent.height() - self.height() - 6))
+                new_pos = QPoint(nx, ny)
+            self.move(new_pos)
             event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -333,6 +353,7 @@ class SnippingOverlay(QWidget):
     def __init__(self, screen_pixmap: QPixmap, geometry: QRect, config):
         super().__init__(None)
         self.screen_pixmap = screen_pixmap
+        self._pil_screen = None
         self.config = config
         self.lang = config.get("language", default="ua")
 
@@ -347,8 +368,9 @@ class SnippingOverlay(QWidget):
         self.setGeometry(geometry)
 
         self.selection_rect = QRect()
-        self.is_selecting = False
-        self.select_start = QPoint()
+        self._drag_mode: str | None = None
+        self._drag_origin = QPoint()
+        self._drag_start_rect = QRect()
 
         self.current_tool = "select"
         self.current_color = QColor(config.get("toolbar", "default_color", "#FF3B30"))
@@ -385,6 +407,46 @@ class SnippingOverlay(QWidget):
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self.undo_last)
         QShortcut(QKeySequence("Z"), self, activated=lambda: self.toolbar._toggle_magnifier())
 
+    def _hit_test_selection(self, pos: QPoint) -> str:
+        r = self.selection_rect
+        if r.isNull() or r.width() < 8 or r.height() < 8:
+            return "new"
+        m = 8
+        handles = {
+            "tl": r.topLeft(),
+            "tr": r.topRight(),
+            "bl": r.bottomLeft(),
+            "br": r.bottomRight(),
+            "t": QPoint(r.center().x(), r.top()),
+            "b": QPoint(r.center().x(), r.bottom()),
+            "l": QPoint(r.left(), r.center().y()),
+            "r": QPoint(r.right(), r.center().y()),
+        }
+        for name, pt in handles.items():
+            if abs(pos.x() - pt.x()) <= m and abs(pos.y() - pt.y()) <= m:
+                return name
+        if r.contains(pos):
+            return "move"
+        return "new"
+
+    def _update_select_cursor(self, pos: QPoint):
+        if self.current_tool != "select":
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            return
+        mode = self._drag_mode or self._hit_test_selection(pos)
+        cursor_map = {
+            "tl": Qt.CursorShape.SizeFDiagCursor,
+            "br": Qt.CursorShape.SizeFDiagCursor,
+            "tr": Qt.CursorShape.SizeBDiagCursor,
+            "bl": Qt.CursorShape.SizeBDiagCursor,
+            "l": Qt.CursorShape.SizeHorCursor,
+            "r": Qt.CursorShape.SizeHorCursor,
+            "t": Qt.CursorShape.SizeVerCursor,
+            "b": Qt.CursorShape.SizeVerCursor,
+            "move": Qt.CursorShape.SizeAllCursor,
+        }
+        self.setCursor(cursor_map.get(mode, Qt.CursorShape.CrossCursor))
+
     def _toggle_color_popover(self):
         if self.color_popover.isVisible():
             self.color_popover.hide()
@@ -408,21 +470,23 @@ class SnippingOverlay(QWidget):
                 self.toolbar.set_color(col)
 
     def _ask_text_topmost(self, title: str, label: str) -> tuple[str, bool]:
+        p = theme.CURRENT
         dlg = QInputDialog(self)
         dlg.setWindowTitle(title)
         dlg.setLabelText(label)
         dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        dlg.setStyleSheet("""
-            QInputDialog { background-color: #1C1D21; color: #F2F2F7; }
-            QLabel { color: #F2F2F7; font-size: 13px; }
-            QLineEdit {
+        dlg.setStyleSheet(f"""
+            QInputDialog {{ background-color: #1C1D21; color: #F2F2F7; }}
+            QLabel {{ color: #F2F2F7; font-size: 13px; }}
+            QLineEdit {{
                 background-color: #26272B; color: #FFFFFF;
-                border: 1px solid rgba(255,255,255,40); border-radius: 6px; padding: 6px;
-            }
-            QPushButton {
-                background-color: #2563EB; color: #FFFFFF; border-radius: 6px;
-                padding: 6px 14px; font-weight: 600;
-            }
+                border: 1px solid rgba(255,255,255,45); border-radius: 6px; padding: 7px 9px;
+                min-width: 240px;
+            }}
+            QPushButton {{
+                background-color: {p.accent}; color: {p.on_accent}; border-radius: 6px;
+                padding: 6px 16px; font-weight: 600;
+            }}
         """)
         ok = bool(dlg.exec())
         return dlg.textValue(), ok
@@ -431,7 +495,7 @@ class SnippingOverlay(QWidget):
         primary = self.screen()
         avail = primary.geometry() if primary else self.rect()
         local_x = avail.x() - self.geometry().x() + (avail.width() - self.toolbar.width()) // 2
-        local_y = avail.y() - self.geometry().y() + 12
+        local_y = avail.y() - self.geometry().y() + 14
         self.toolbar.move(max(10, local_x), max(10, local_y))
 
     def _on_tool_selected(self, tool_id: str):
@@ -439,6 +503,7 @@ class SnippingOverlay(QWidget):
         self.current_tool = tool_id
         if tool_id != "select" and self.selection_rect.isNull():
             self.selection_rect = QRect(0, 0, self.width(), self.height())
+        self._update_select_cursor(self.cursor_pos)
         self.update()
 
     def _on_color_changed(self, color: QColor):
@@ -464,9 +529,11 @@ class SnippingOverlay(QWidget):
         delta = 1 if event.angleDelta().y() > 0 else -1
         if self.current_tool in ("blur", "pixelate"):
             self.blur_intensity = max(4, min(45, self.blur_intensity + delta * 2))
+            self.config.set("toolbar", "blur_intensity", self.blur_intensity, debounce=True)
             QToolTip.showText(event.globalPosition().toPoint(), f"Blur: {self.blur_intensity}px", self)
         else:
             self.stroke_width = max(1, min(20, self.stroke_width + delta))
+            self.config.set("toolbar", "stroke_width", self.stroke_width, debounce=True)
             QToolTip.showText(event.globalPosition().toPoint(), f"Size: {self.stroke_width}px", self)
         self.update()
 
@@ -480,6 +547,7 @@ class SnippingOverlay(QWidget):
                 self.annotations.clear()
                 self.toolbar.select_tool("select")
                 self._position_toolbar_top()
+                self._update_select_cursor(event.position().toPoint())
                 self.update()
             else:
                 self.close()
@@ -492,9 +560,15 @@ class SnippingOverlay(QWidget):
         pos_f = event.position()
 
         if self.current_tool == "select":
-            self.is_selecting = True
-            self.select_start = pos
-            self.selection_rect = QRect(pos, pos)
+            mode = self._hit_test_selection(pos)
+            self._drag_mode = mode
+            self._drag_origin = pos
+            if mode == "new":
+                self.selection_rect = QRect(pos, pos)
+                self._drag_start_rect = QRect(pos, pos)
+            else:
+                self._drag_start_rect = QRect(self.selection_rect)
+            self._update_select_cursor(pos)
             self.update()
             return
 
@@ -537,12 +611,45 @@ class SnippingOverlay(QWidget):
         )
         self.update()
 
+    def _apply_selection_drag(self, pos: QPoint):
+        mode = self._drag_mode
+        sr = self._drag_start_rect
+        if mode == "new":
+            self.selection_rect = QRect(self._drag_origin, pos).normalized()
+            return
+        if mode == "move":
+            delta = pos - self._drag_origin
+            moved = sr.translated(delta)
+            dx = 0
+            dy = 0
+            if moved.left() < 0:
+                dx = -moved.left()
+            elif moved.right() >= self.width():
+                dx = self.width() - 1 - moved.right()
+            if moved.top() < 0:
+                dy = -moved.top()
+            elif moved.bottom() >= self.height():
+                dy = self.height() - 1 - moved.bottom()
+            self.selection_rect = moved.translated(dx, dy)
+            return
+
+        l, t, r, b = sr.left(), sr.top(), sr.right(), sr.bottom()
+        if "l" in mode:
+            l = pos.x()
+        if "r" in mode:
+            r = pos.x()
+        if "t" in mode:
+            t = pos.y()
+        if "b" in mode:
+            b = pos.y()
+        self.selection_rect = QRect(QPoint(l, t), QPoint(r, b)).normalized().intersected(self.rect())
+
     def mouseMoveEvent(self, event):
         self.cursor_pos = event.position().toPoint()
         pos_f = event.position()
 
-        if self.is_selecting:
-            self.selection_rect = QRect(self.select_start, self.cursor_pos).normalized()
+        if self._drag_mode is not None:
+            self._apply_selection_drag(self.cursor_pos)
             if self.config.get("toolbar", "position", "top") == "selection":
                 self._dock_toolbar_below_selection()
         elif self.active_annotation is not None:
@@ -551,13 +658,19 @@ class SnippingOverlay(QWidget):
                 self.active_annotation.points.append(pos_f)
             elif self.active_annotation.tool in ("blur", "pixelate"):
                 rect = self.active_annotation.bounding_rect().toRect()
-                if rect.width() > 4 and rect.height() > 4:
+                if rect.width() > 4 and rect.height() > 4 and rect != self.active_annotation.cached_rect:
+                    if self._pil_screen is None:
+                        self._pil_screen = pixmap_to_pil_rgba(self.screen_pixmap)
+                    self.active_annotation.cached_rect = QRect(rect)
                     self.active_annotation.cached_pixmap = apply_blur_region(
                         self.screen_pixmap,
                         rect,
                         intensity=self.blur_intensity,
                         pixelate=(self.active_annotation.tool == "pixelate"),
+                        pil_source=self._pil_screen,
                     )
+        else:
+            self._update_select_cursor(self.cursor_pos)
 
         self.update()
 
@@ -565,13 +678,14 @@ class SnippingOverlay(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
 
-        if self.is_selecting:
-            self.is_selecting = False
-            self.selection_rect = QRect(self.select_start, event.position().toPoint()).normalized()
+        if self._drag_mode is not None:
+            self._apply_selection_drag(event.position().toPoint())
+            self._drag_mode = None
             if self.selection_rect.width() < 5 or self.selection_rect.height() < 5:
                 self.selection_rect = QRect()
             elif self.config.get("toolbar", "position", "top") == "selection":
                 self._dock_toolbar_below_selection()
+            self._update_select_cursor(event.position().toPoint())
         elif self.active_annotation is not None:
             if self.active_annotation.tool == "callout":
                 text, ok = self._ask_text_topmost(tr(self.lang, "dlg_callout_title"), tr(self.lang, "dlg_callout_label"))
@@ -602,7 +716,7 @@ class SnippingOverlay(QWidget):
         canvas = self.screen_pixmap.copy()
         painter = QPainter(canvas)
         for item in self.annotations:
-            item.draw(painter)
+            item.draw(painter, show_preview_border=False)
         painter.end()
 
         target_rect = self.selection_rect
@@ -619,12 +733,13 @@ class SnippingOverlay(QWidget):
 
     def save_to_file_dialog(self):
         final_pix = self.render_final_pixmap()
-        default_dir = self.config.get("capture", "save_directory", "")
+        default_dir = self.config.get("capture", "save_directory", "") or str(Path.home() / "Pictures" / "SnapLite")
+        default_file = str(Path(default_dir) / default_snap_filename("png"))
         self.hide()
         file_path, _ = QFileDialog.getSaveFileName(
             None,
             tr(self.lang, "dlg_save_title"),
-            f"{default_dir}/Snap.png",
+            default_file,
             "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg)",
         )
         if file_path:
@@ -636,6 +751,7 @@ class SnippingOverlay(QWidget):
 
     def closeEvent(self, event):
         self.annotations.clear()
+        self._pil_screen = None
         self.overlay_closed.emit()
         super().closeEvent(event)
 
@@ -653,9 +769,9 @@ class SnippingOverlay(QWidget):
             painter.fillPath(path, QColor(0, 0, 0, dim_alpha))
 
         for item in self.annotations:
-            item.draw(painter)
+            item.draw(painter, show_preview_border=False)
         if self.active_annotation is not None:
-            self.active_annotation.draw(painter)
+            self.active_annotation.draw(painter, show_preview_border=True)
 
         if not self.selection_rect.isNull():
             self._draw_selection_frame(painter, self.selection_rect)
@@ -664,6 +780,7 @@ class SnippingOverlay(QWidget):
 
         if (
             self.show_magnifier
+            and self._drag_mode != "move"
             and not self.toolbar.geometry().contains(self.cursor_pos)
             and not (self.color_popover.isVisible() and self.color_popover.geometry().contains(self.cursor_pos))
         ):
@@ -671,7 +788,7 @@ class SnippingOverlay(QWidget):
 
     def _draw_selection_frame(self, painter: QPainter, rect: QRect):
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(0, 0, 0, 140), 2.5))
+        painter.setPen(QPen(QColor(0, 0, 0, 145), 2.5))
         painter.drawRect(rect)
         painter.setPen(QPen(QColor(255, 255, 255, 245), 1.5))
         painter.drawRect(rect)
@@ -690,7 +807,7 @@ class SnippingOverlay(QWidget):
         painter.setPen(QPen(QColor(24, 25, 29, 220), 1.2))
         painter.setBrush(QColor(255, 255, 255))
         for p in pts:
-            painter.drawRect(QRect(p.x() - 4, p.y() - 4, 8, 8))
+            painter.drawRoundedRect(QRectF(p.x() - 4, p.y() - 4, 8, 8), 2, 2)
 
     def _draw_dimension_badge(self, painter: QPainter, rect: QRect):
         text = f"{rect.width()} × {rect.height()}"
@@ -701,16 +818,16 @@ class SnippingOverlay(QWidget):
         bh = fm.height() + 10
 
         bx = rect.left()
-        by = rect.bottom() + 12
-        if by + bh > self.height() - 10:
-            by = max(8, rect.top() - bh - 10)
+        by = rect.top() - bh - 10
+        if by < 8:
+            by = min(self.height() - bh - 8, rect.bottom() + 12)
 
         badge_rect = QRectF(bx, by, bw, bh)
-        painter.setPen(QPen(QColor(255, 255, 255, 28), 1))
-        painter.setBrush(QColor(24, 25, 29, 232))
+        painter.setPen(QPen(QColor(255, 255, 255, 32), 1))
+        painter.setBrush(QColor(22, 23, 27, 236))
         painter.drawRoundedRect(badge_rect, 6, 6)
 
-        painter.setPen(QColor("#E5E5EA"))
+        painter.setPen(QColor("#F2F2F7"))
         painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, text)
 
     def _draw_reference_magnifier(self, painter: QPainter, pos: QPoint):

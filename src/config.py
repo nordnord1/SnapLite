@@ -1,6 +1,8 @@
 import json
+import os
 import sys
 from pathlib import Path
+from PyQt6.QtCore import QTimer
 
 DEFAULT_HOTKEYS = {
     "region_capture": "Ctrl+PrintScreen",
@@ -43,22 +45,37 @@ DEFAULT_CONFIG = {
 
 
 class ConfigManager:
-    def __init__(self, config_path="config.json"):
+    def __init__(self, config_name="config.json"):
         if getattr(sys, "frozen", False):
             base_dir = Path(sys.executable).parent
         else:
             base_dir = Path(__file__).resolve().parent.parent
-        self.config_path = base_dir / config_path
+
+        appdata = os.environ.get("APPDATA", "")
+        user_dir = (Path(appdata) if appdata else Path.home() / "AppData" / "Roaming") / "SnapLite"
+        self.config_path = user_dir / config_name
+        self._legacy_path = base_dir / config_name
+        self._dirty = False
+
+        self._save_timer = QTimer()
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(220)
+        self._save_timer.timeout.connect(self.save)
+
         self.data = self._load()
 
     def _load(self) -> dict:
-        if self.config_path.exists():
-            try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                return self._merge_defaults(DEFAULT_CONFIG, loaded)
-            except Exception:
-                pass
+        for candidate in (self.config_path, self._legacy_path):
+            if candidate.exists():
+                try:
+                    with open(candidate, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    merged = self._merge_defaults(DEFAULT_CONFIG, loaded)
+                    if candidate != self.config_path:
+                        self._write_file(merged)
+                    return merged
+                except Exception:
+                    pass
         return json.loads(json.dumps(DEFAULT_CONFIG))
 
     def _merge_defaults(self, default: dict, loaded: dict) -> dict:
@@ -70,12 +87,23 @@ class ConfigManager:
                 result[k] = v
         return result
 
-    def save(self):
+    def _write_file(self, payload: dict):
         try:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            self._dirty = False
         except Exception:
             pass
+
+    def save(self):
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+        self._write_file(self.data)
+
+    def flush(self):
+        if self._dirty or self._save_timer.isActive():
+            self.save()
 
     def get(self, section: str, key: str = None, default=None):
         if key is None:
@@ -85,10 +113,20 @@ class ConfigManager:
             return str(Path.home() / "Pictures" / "SnapLite")
         return val
 
-    def set(self, section: str, key: str, value=None, save: bool = True):
+    def set(self, section: str, key: str, value=None, save: bool = True, debounce: bool = False):
         if value is None and not isinstance(self.data.get(section), dict):
+            if self.data.get(section) == key:
+                return
             self.data[section] = key
         else:
-            self.data.setdefault(section, {})[key] = value
+            sec_dict = self.data.setdefault(section, {})
+            if sec_dict.get(key) == value:
+                return
+            sec_dict[key] = value
+
+        self._dirty = True
         if save:
-            self.save()
+            if debounce:
+                self._save_timer.start()
+            else:
+                self.save()

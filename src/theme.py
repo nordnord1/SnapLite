@@ -11,6 +11,7 @@ ACCENT_PRESETS = ["#2563EB", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#0891B
 class Palette:
     accent: str = DEFAULT_ACCENT
     accent_hover: str = "#1D4ED8"
+    accent_vivid: str = "#3B82F6"
     on_accent: str = "#FFFFFF"
     tint: tuple = (26, 27, 32)
     base: tuple = (16, 17, 20)
@@ -39,13 +40,16 @@ def palette_from_accent(accent_hex: str, tint=None) -> Palette:
     c = QColor(accent_hex)
     r, g, b = c.red(), c.green(), c.blue()
     h, l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
-    hover = _hls(h, max(0.0, l - 0.08), s)
+    hover = _hls(h, min(1.0, l + 0.08) if l < 0.25 else max(0.0, l - 0.07), s)
+    vivid_l = max(0.56, min(0.70, l))
+    vivid_s = max(0.52, s) if s > 0.08 else s
+    vivid = _hls(h, vivid_l, vivid_s)
     luminance = 0.299 * r + 0.587 * g + 0.114 * b
     on_accent = "#111214" if luminance > 175 else "#FFFFFF"
     if tint is None:
         tint = _hls(h, 0.11, min(s, 0.16))
     base = tuple(_clamp(v * 0.62) for v in tint)
-    return Palette(_hex((r, g, b)), _hex(hover), on_accent, tint, base)
+    return Palette(_hex((r, g, b)), _hex(hover), _hex(vivid), on_accent, tint, base)
 
 
 def extract_palette(img: Image.Image) -> Palette:
@@ -101,9 +105,11 @@ def blurred_pixmap(img: Image.Image, radius: int) -> QPixmap:
 
 
 def build_qss(p: Palette) -> str:
-    a, ah, on = p.accent, p.accent_hover, p.on_accent
+    a, ah, av_hex, on = p.accent, p.accent_hover, p.accent_vivid, p.on_accent
     ac = QColor(a)
     acc = (ac.red(), ac.green(), ac.blue())
+    av = QColor(av_hex)
+    avc = (av.red(), av.green(), av.blue())
     t = p.tint
     t_hover = tuple(_clamp(v + 14) for v in t)
     return f"""
@@ -114,49 +120,49 @@ def build_qss(p: Palette) -> str:
     }}
     QLabel {{ background: transparent; }}
     QFrame#Sidebar {{
-        background-color: rgba(0, 0, 0, 78);
+        background-color: rgba(0, 0, 0, 82);
         border: none;
-        border-right: 1px solid rgba(255, 255, 255, 18);
+        border-right: 1px solid rgba(255, 255, 255, 20);
         border-top-left-radius: 14px;
         border-bottom-left-radius: 14px;
     }}
-    QLabel[role="AppName"] {{ font-size: 15px; font-weight: 700; }}
-    QLabel[role="Muted"] {{ color: rgba(235, 235, 245, 155); font-size: 12px; }}
-    QLabel[role="PageTitle"] {{ font-size: 20px; font-weight: 700; }}
+    QLabel[role="AppName"] {{ font-size: 15px; font-weight: 700; letter-spacing: 0.2px; }}
+    QLabel[role="Muted"] {{ color: rgba(235, 235, 245, 158); font-size: 12px; }}
+    QLabel[role="PageTitle"] {{ font-size: 20px; font-weight: 700; letter-spacing: 0.1px; }}
     QLabel[role="Section"] {{
         color: rgba(235, 235, 245, 145); font-size: 11px; font-weight: 700;
-        letter-spacing: 0.5px; padding-left: 2px;
+        letter-spacing: 0.6px; padding-left: 3px; padding-top: 6px; padding-bottom: 1px;
     }}
-    QLabel[role="RowTitle"] {{ font-size: 13px; font-weight: 500; }}
+    QLabel[role="RowTitle"] {{ font-size: 13px; font-weight: 500; color: rgba(244, 244, 250, 240); }}
     QLabel[role="RowIcon"] {{ background-color: rgba(255, 255, 255, 16); border-radius: 8px; }}
     QLabel[role="Chip"] {{
-        background-color: rgba(0, 0, 0, 75); border: 1px solid rgba(255, 255, 255, 30);
+        background-color: rgba(0, 0, 0, 78); border: 1px solid rgba(255, 255, 255, 32);
         border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 600;
         font-family: "Consolas", monospace;
-        color: rgba(255, 255, 255, 225);
+        color: rgba(255, 255, 255, 228);
     }}
     QLabel[role="TileIcon"] {{ background-color: {a}; border-radius: 10px; }}
     QLabel[role="TileTitle"] {{ font-size: 15px; font-weight: 700; color: #FFFFFF; }}
 
     QFrame[role="Card"] {{
-        background-color: {rgba(t, 165)};
-        border: 1px solid rgba(255, 255, 255, 22);
+        background-color: {rgba(t, 168)};
+        border: 1px solid rgba(255, 255, 255, 24);
         border-radius: 12px;
     }}
     QFrame[role="ActionTile"] {{
-        background-color: {rgba(t, 165)};
-        border: 1px solid rgba(255, 255, 255, 24);
+        background-color: {rgba(t, 168)};
+        border: 1px solid rgba(255, 255, 255, 26);
         border-radius: 13px;
     }}
     QFrame[role="ActionTile"]:hover {{
-        background-color: {rgba(t_hover, 190)};
-        border: 1px solid {rgba(acc, 185)};
+        background-color: {rgba(t_hover, 195)};
+        border: 1px solid {rgba(avc, 190)};
     }}
     QFrame[role="Divider"] {{ background-color: rgba(255, 255, 255, 15); border: none; }}
 
     QPushButton {{
         background-color: rgba(255, 255, 255, 16);
-        border: 1px solid rgba(255, 255, 255, 26);
+        border: 1px solid rgba(255, 255, 255, 28);
         border-radius: 8px;
         padding: 6px 14px;
         font-size: 12px;
@@ -164,35 +170,56 @@ def build_qss(p: Palette) -> str:
         color: #F2F2F7;
     }}
     QPushButton:hover {{
-        background-color: rgba(255, 255, 255, 26);
-        border-color: rgba(255, 255, 255, 45);
+        background-color: rgba(255, 255, 255, 28);
+        border-color: rgba(255, 255, 255, 48);
     }}
     QPushButton:pressed {{ background-color: rgba(255, 255, 255, 12); }}
     QPushButton[role="Primary"] {{
         background-color: {a};
-        border: 1px solid {a};
+        border: 1px solid {rgba(avc, 160)};
         color: {on};
         font-weight: 600;
         padding: 6px 16px;
     }}
     QPushButton[role="Primary"]:hover {{
         background-color: {ah};
-        border-color: {ah};
+        border-color: {av_hex};
+    }}
+
+    QPushButton[role="SupportBtn"] {{
+        background-color: {rgba(avc, 32)};
+        border: 1px solid {rgba(avc, 108)};
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #FFFFFF;
+    }}
+    QPushButton[role="SupportBtn"]:hover {{
+        background-color: {rgba(avc, 64)};
+        border: 1px solid {rgba(avc, 195)};
+    }}
+    QPushButton[role="SupportBtn"]:pressed {{
+        background-color: {rgba(avc, 42)};
     }}
 
     QPushButton[role="Nav"] {{
         text-align: left;
         background: transparent;
-        border: none;
+        border: 1px solid transparent;
         border-radius: 9px;
         padding: 9px 12px;
         font-size: 13px;
         font-weight: 500;
         color: rgba(255, 255, 255, 200);
     }}
-    QPushButton[role="Nav"]:hover {{ background-color: rgba(255, 255, 255, 14); }}
+    QPushButton[role="Nav"]:hover {{
+        background-color: rgba(255, 255, 255, 14);
+        color: #FFFFFF;
+    }}
     QPushButton[role="Nav"]:checked {{
-        background-color: {rgba(acc, 75)};
+        background-color: {rgba(acc, 82)};
+        border: 1px solid {rgba(avc, 115)};
         color: #FFFFFF;
         font-weight: 600;
     }}
@@ -214,11 +241,14 @@ def build_qss(p: Palette) -> str:
         font-size: 12px;
         font-weight: 600;
         padding: 6px 12px;
-        background-color: rgba(0, 0, 0, 65);
+        background-color: rgba(0, 0, 0, 68);
+    }}
+    QPushButton[role="HotkeyField"]:hover {{
+        border-color: {rgba(avc, 130)};
     }}
     QPushButton[role="HotkeyField"][recording="true"] {{
-        background-color: {rgba(acc, 55)};
-        border: 1px solid {a};
+        background-color: {rgba(avc, 58)};
+        border: 1px solid {av_hex};
         color: #FFFFFF;
     }}
 
@@ -229,15 +259,15 @@ def build_qss(p: Palette) -> str:
         font-weight: 500;
     }}
     QPushButton[role="ToolChip"]:checked {{
-        background-color: {rgba(acc, 65)};
-        border: 1px solid {rgba(acc, 195)};
+        background-color: {rgba(acc, 68)};
+        border: 1px solid {rgba(avc, 195)};
         color: #FFFFFF;
         font-weight: 600;
     }}
-    QPushButton[role="ToolChip"]:disabled {{ color: rgba(255, 255, 255, 130); }}
+    QPushButton[role="ToolChip"]:disabled {{ color: rgba(255, 255, 255, 135); }}
 
     QFrame[role="Segmented"] {{
-        background-color: rgba(0, 0, 0, 65);
+        background-color: rgba(0, 0, 0, 68);
         border: 1px solid rgba(255, 255, 255, 22);
         border-radius: 9px;
     }}
@@ -257,27 +287,32 @@ def build_qss(p: Palette) -> str:
     }}
 
     QSlider::groove:horizontal {{
-        height: 4px;
+        height: 5px;
         background: rgba(255, 255, 255, 32);
         border-radius: 2px;
     }}
     QSlider::sub-page:horizontal {{
-        background: {a};
+        background: {av_hex};
         border-radius: 2px;
     }}
     QSlider::handle:horizontal {{
         background: #FFFFFF;
-        width: 16px;
-        height: 16px;
-        margin: -6px 0;
+        border: 1px solid rgba(0, 0, 0, 65);
+        width: 15px;
+        height: 15px;
+        margin: -5px 0;
         border-radius: 8px;
+    }}
+    QSlider::handle:horizontal:hover {{
+        background: #FFFFFF;
+        border: 2px solid {av_hex};
     }}
 
     QToolTip {{
         background-color: #1C1D21;
         color: #F2F2F7;
-        border: 1px solid rgba(255, 255, 255, 30);
-        padding: 4px 8px;
+        border: 1px solid rgba(255, 255, 255, 34);
+        padding: 5px 9px;
         border-radius: 6px;
     }}
     """

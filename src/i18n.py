@@ -74,6 +74,8 @@ TRANSLATIONS = {
         "dlg_callout_label": "Текст виноски:",
         "dlg_save_title": "Зберегти скріншот",
         "toast_copied": "Знімок скопійовано",
+        "toast_copied_saved": "Скопійовано та збережено",
+        "toast_saved_only": "Знімок збережено у файл",
         "toast_open": "Відкрити",
         "toast_save_as": "Зберегти як...",
         "tray_tooltip": "SnapLite — Натисніть, щоб відкрити",
@@ -95,7 +97,7 @@ TRANSLATIONS = {
         "status_sub": "0% CPU • Instant Hook",
         "support_us": "Support Us",
         "support_title": "Support SnapLite Project",
-        "support_subtitle": "Thank you for using SnapLite! You can support the development via cryptocurrency:",
+        "support_subtitle": "Thank you for using SnapLite! You can support ongoing development via cryptocurrency:",
         "btn_copy_addr": "Copy",
         "btn_copied_addr": "Copied!",
         "tooltip_min": "Minimize to system tray",
@@ -159,6 +161,8 @@ TRANSLATIONS = {
         "dlg_callout_label": "Callout text:",
         "dlg_save_title": "Save Screenshot",
         "toast_copied": "Screenshot copied",
+        "toast_copied_saved": "Copied & saved",
+        "toast_saved_only": "Screenshot saved",
         "toast_open": "Open",
         "toast_save_as": "Save as...",
         "tray_tooltip": "SnapLite — Click to open",
@@ -244,6 +248,8 @@ TRANSLATIONS = {
         "dlg_callout_label": "Текст выноски:",
         "dlg_save_title": "Сохранить скриншот",
         "toast_copied": "Снимок скопирован",
+        "toast_copied_saved": "Скопировано и сохранено",
+        "toast_saved_only": "Снимок сохранён в файл",
         "toast_open": "Открыть",
         "toast_save_as": "Сохранить как...",
         "tray_tooltip": "SnapLite — Нажмите, чтобы открыть",
@@ -260,3 +266,7 @@ TRANSLATIONS = {
 def tr(lang: str, key: str) -> str:
     lang_dict = TRANSLATIONS.get(lang, TRANSLATIONS["ua"])
     return lang_dict.get(key, TRANSLATIONS["ua"].get(key, key))
+
+
+def tr_btn(lang: str, key: str) -> str:
+    return tr(lang, key).replace("&", "&&")
