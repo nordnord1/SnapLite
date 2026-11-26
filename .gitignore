@@ -5,4 +5,5 @@ build/
 dist/
 *.spec
 *.exe
+config.json
 .DS_Store
